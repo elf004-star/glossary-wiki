@@ -1,0 +1,4 @@
+interface:
+  display_name: "Glossary Wiki"
+  short_description: "术语驱动的项目知识库，支持增量摄取、跨项目查询和分层健康检查"
+  default_prompt: "使用 $glossary-wiki ingest 为当前目录建立术语驱动的 wiki。"
