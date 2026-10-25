@@ -136,6 +136,12 @@ class ChangesTests(unittest.TestCase):
         changes.atomic_json(self.state / 'scope.json', {'include': ['**/*.md'], 'exclude': None})
         with self.assertRaisesRegex(ValueError, 'scope.json'):
             self.invoke('scan')
+        changes.atomic_json(self.state / 'scope.json', {})
+        with self.assertRaisesRegex(ValueError, 'scope.json'):
+            self.invoke('scan')
+        changes.atomic_json(self.state / 'scope.json', {'exclude': []})
+        with self.assertRaisesRegex(ValueError, 'scope.json'):
+            self.invoke('scan')
 
     def test_missing_exclude_key_is_allowed(self):
         changes.atomic_json(self.state / 'scope.json', {'include': ['**/*.md']})
@@ -179,6 +185,25 @@ class ChangesTests(unittest.TestCase):
         self.hashdeep = missing
         with self.assertRaisesRegex(ValueError, 'No such file'):
             self.invoke('scan')
+
+    def test_missing_row_in_batch_does_not_rehash_healthy_files(self):
+        (self.root / 'a.md').write_text('a')
+        (self.root / 'b.md').write_text('b')
+        calls = []
+
+        def partial(argv, cwd, **kwargs):
+            calls.append(argv[4:])
+            rows = '%%%% HASHDEEP-1.0\n'
+            for path in argv[4:]:
+                if path != './b.md':
+                    content = (Path(cwd) / path).read_bytes()
+                    rows += f'{len(content)},{hashlib.sha256(content).hexdigest()},{path}\n'
+            return subprocess.CompletedProcess(argv, 0, rows, './b.md: Permission denied')
+
+        self.hashdeep = partial
+        with self.assertRaisesRegex(ValueError, 'Permission denied'):
+            self.invoke('scan')
+        self.assertEqual(len(calls), 1)
 
     def test_failed_batch_falls_back_to_individual_files(self):
         (self.root / 'a.md').write_text('a')

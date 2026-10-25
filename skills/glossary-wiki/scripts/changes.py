@@ -58,9 +58,9 @@ def validate_scope(scope: Any) -> dict[str, Any]:
     if not isinstance(scope, dict):
         raise ValueError('scope.json must contain an object')
     for key in ('include', 'exclude'):
-        if key not in scope and key == 'exclude':
+        if key == 'exclude' and key not in scope:
             continue
-        value = scope[key]
+        value = scope.get(key)
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise ValueError(f'scope.json {key} must be a list of glob strings')
     if not scope['include']:
@@ -141,10 +141,13 @@ def snapshot(root: Path, scope: Any) -> dict[str, dict[str, Any]]:
     for chunk in chunks(paths):
         try:
             records.update(hashdeep_chunk(binary, root, chunk))
-        except (RuntimeError, ValueError):
+        except ValueError:
+            # Rows already name the affected files; retrying would only rehash healthy ones.
+            raise
+        except RuntimeError:
             if len(chunk) == 1:
                 raise
-            # Isolate a failing batch so the error names the file.
+            # Isolate a failing process so the error names the file.
             for path in chunk:
                 records.update(hashdeep_chunk(binary, root, [path]))
     if inventory(root, scope) != paths:
