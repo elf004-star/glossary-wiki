@@ -10,17 +10,21 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 SKIP = {'.git', '.Glossary-Wiki', 'node_modules', '.venv', '__pycache__'}
 CATALOG = Path(__file__).resolve().parents[1] / 'catalog'
+CHUNK_SIZE = 64
+MAX_ARG_CHARS = 8000
 
 
-def read_json(path, default=None):
+def read_json(path: Path, default: Any = None) -> Any:
     return json.loads(path.read_text(encoding='utf-8')) if path.exists() else default
 
 
-def atomic_json(path, data):
+def atomic_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix='.writing-')
     try:
@@ -34,7 +38,7 @@ def atomic_json(path, data):
 
 
 @contextmanager
-def lock(state):
+def lock(state: Path) -> Iterator[None]:
     marker = state / 'changes.lock'
     fd = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     try:
@@ -45,17 +49,27 @@ def lock(state):
         marker.unlink()
 
 
-def matches(path, pattern):
+def matches(path: str, pattern: str) -> bool:
     return fnmatch.fnmatchcase(path, pattern) or (
         pattern.startswith('**/') and fnmatch.fnmatchcase(path, pattern[3:]))
 
 
-def inventory(root, scope):
-    if not isinstance(scope, dict) or not isinstance(scope.get('include'), list) or not scope['include']:
-        raise ValueError('scope.json needs a nonempty include list')
+def validate_scope(scope: Any) -> dict[str, Any]:
+    if not isinstance(scope, dict):
+        raise ValueError('scope.json must contain an object')
     for key in ('include', 'exclude'):
-        if not all(isinstance(x, str) for x in scope.get(key, [])):
-            raise ValueError(f'{key} must contain glob strings')
+        if key not in scope and key == 'exclude':
+            continue
+        value = scope[key]
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError(f'scope.json {key} must be a list of glob strings')
+    if not scope['include']:
+        raise ValueError('scope.json needs a nonempty include list')
+    return scope
+
+
+def inventory(root: Path, scope: Any) -> list[str]:
+    scope = validate_scope(scope)
     paths = []
     def failed(error):
         raise error
@@ -78,37 +92,74 @@ def inventory(root, scope):
     return sorted(paths)
 
 
-def snapshot(root, scope):
+def chunks(paths: list[str]) -> Iterator[list[str]]:
+    chunk: list[str] = []
+    size = 0
+    for path in paths:
+        length = len(path) + 3  # './' prefix and separator
+        if chunk and (len(chunk) == CHUNK_SIZE or size + length > MAX_ARG_CHARS):
+            yield chunk
+            chunk, size = [], 0
+        chunk.append(path)
+        size += length
+    if chunk:
+        yield chunk
+
+
+def hashdeep_chunk(binary: str, root: Path, paths: list[str]) -> dict[str, dict[str, Any]]:
+    arguments = ['./' + path for path in paths]
+    result = subprocess.run([binary, '-c', 'sha256', '-l', *arguments],
+                            cwd=root, capture_output=True, text=True)
+    # Exit status is authoritative; some builds print harmless warnings to stderr.
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or f'exit code {result.returncode}'
+        raise RuntimeError('hashdeep failed: ' + detail)
+    rows = {}
+    # Split on newline only: splitlines() also breaks on U+2028/U+0085,
+    # which are legal in filenames.
+    for line in result.stdout.split('\n'):
+        match = re.match(r'^(\d+),([0-9a-fA-F]{64}),(.+?)\r?$', line)
+        if match:
+            size, digest, name = match.groups()
+            rows[name] = {'size': int(size), 'sha256': digest.lower()}
+    expected = set(arguments)
+    missing = expected - rows.keys()
+    if missing or rows.keys() - expected:
+        names = sorted(missing or rows.keys() - expected)
+        detail = result.stderr.strip()
+        message = 'Unexpected hashdeep output for ' + ', '.join(names)
+        raise ValueError(message + (': ' + detail if detail else ''))
+    return {path: rows['./' + path] for path in paths}
+
+
+def snapshot(root: Path, scope: Any) -> dict[str, dict[str, Any]]:
     binary = shutil.which('hashdeep')
     if not binary:
         raise RuntimeError('hashdeep unavailable; no baseline was advanced')
     paths = inventory(root, scope)
-    records = {}
-    # One invocation per file preserves filename identity even with commas/Unicode.
-    # It trades process overhead for reliable parsing; large runs are partitioned by wiki.
-    for relative in paths:
-        result = subprocess.run([binary, '-c', 'sha256', '-l', './' + relative],
-                                cwd=root, capture_output=True, text=True, check=True)
-        if result.stderr.strip():
-            raise RuntimeError('hashdeep reported: ' + result.stderr.strip())
-        rows = [line.split(',', 2) for line in result.stdout.splitlines()
-                if re.match(r'^\d+,[0-9a-fA-F]{64},', line)]
-        if len(rows) != 1:
-            raise ValueError('Unexpected hashdeep output for ' + relative)
-        size, digest, _ = rows[0]
-        records[relative] = {'size': int(size), 'sha256': digest.lower()}
+    records: dict[str, dict[str, Any]] = {}
+    for chunk in chunks(paths):
+        try:
+            records.update(hashdeep_chunk(binary, root, chunk))
+        except (RuntimeError, ValueError):
+            if len(chunk) == 1:
+                raise
+            # Isolate a failing batch so the error names the file.
+            for path in chunk:
+                records.update(hashdeep_chunk(binary, root, [path]))
     if inventory(root, scope) != paths:
         raise RuntimeError('Inventory changed during scan; retry')
     return records
 
 
-def delta(before, after):
+def delta(before: dict[str, dict[str, Any]],
+          after: dict[str, dict[str, Any]]) -> dict[str, list[str]]:
     return {'added': sorted(after.keys() - before.keys()),
             'changed': sorted(p for p in after.keys() & before.keys() if after[p] != before[p]),
             'removed': sorted(before.keys() - after.keys())}
 
 
-def run(args):
+def run(args: argparse.Namespace) -> None:
     root = Path(args.root).resolve(strict=True)
     state = root / '.Glossary-Wiki' / 'state'
     if not state.is_dir():
@@ -146,7 +197,7 @@ def run(args):
             print(json.dumps({'committed': len(current)}, ensure_ascii=False))
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['scan', 'commit'])
     parser.add_argument('root', help='Source directory owning .Glossary-Wiki')
