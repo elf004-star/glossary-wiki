@@ -13,7 +13,9 @@ mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
 cp -R skills/glossary-wiki "${CODEX_HOME:-$HOME/.codex}/skills/glossary-wiki"
 ```
 
-仅在目标目录尚不存在时执行上述复制。升级已有安装时备份并保留安装目录内 `catalog/` 的个人知识数据，只更新 SKILL.md、agents、references、scripts 和 ATTRIBUTION.md；不要用删除式同步覆盖整个目录。可在宿主的技能列表中确认已发现 glossary-wiki。
+仅在目标目录尚不存在时执行上述复制。升级已有安装时只更新 SKILL.md、agents、references、scripts 和 ATTRIBUTION.md；不要用删除式同步覆盖整个目录。可在宿主的技能列表中确认已发现 glossary-wiki。
+
+全局 catalog 是用户数据，不在安装目录内，默认位于 `~/.glossary-wiki/catalog/`，可用环境变量 `GLOSSARY_WIKI_CATALOG` 指定别处。因此升级、重装或整体替换技能目录都不会影响它。早期版本的安装把 catalog 放在 `skills/glossary-wiki/catalog/`，首次运行新版本时会提示迁移，确认后整目录搬走，不要新旧两处并行写入。
 
 依赖：`uv`、`hashdeep`、`ftag`。macOS 可执行 `brew install hashdeep`，ftag 执行 `cargo install ftag`。技能内有工具检查和缺失处理；安装技能文件本身不会安装系统工具。
 
@@ -29,7 +31,7 @@ cp -R skills/glossary-wiki "${CODEX_HOME:-$HOME/.codex}/skills/glossary-wiki"
 
 宿主若使用 `$glossary-wiki`，将上面的技能调用前缀替换即可。技能是 agent 工作流，不是名为 glossary-wiki 的 shell 可执行程序。
 
-项目数据保留在各自 `.Glossary-Wiki/`；总 index、总术语表和位置登记首次使用时写入技能目录的 `catalog/`。父级收录全部后代术语的可重建投影，知识正文仍在原 wiki。项目内术语唯一，全局同名异义按项目标注。默认快速 lint 只重新解析变化原文；详细 lint 全面复核。
+项目数据保留在各自 `.Glossary-Wiki/`；总 index、总术语表和位置登记首次使用时写入 `~/.glossary-wiki/catalog/`（或 `GLOSSARY_WIKI_CATALOG` 指定的位置）。父级收录全部后代术语的可重建投影，知识正文仍在原 wiki。项目内术语唯一，全局同名异义按项目标注。默认快速 lint 只重新解析变化原文；详细 lint 全面复核。
 
 Hashdeep 辅助脚本提供 scan/commit 两阶段基线；ftag 的目录内标签支持移动后重新发现。目录离开配置搜索范围、离线或不可读时显示待定位，不推断为删除。分类默认阈值、来源与字段格式详见技能内引用文档。
 

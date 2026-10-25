@@ -2,6 +2,7 @@ node_modules
 .claude
 .DS_Store
 
-# Personal generated catalog belongs to the installed skill, not distribution.
+# The global catalog is user data living at ~/.glossary-wiki/catalog/, never in the repo.
+# This entry only covers in-tree catalogs left by installs predating the move.
 skills/glossary-wiki/catalog/
 __pycache__/

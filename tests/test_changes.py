@@ -85,6 +85,14 @@ class ChangesTests(unittest.TestCase):
         (self.root / 'linked.md').symlink_to(self.root / 'normal/a.md')
         self.assertEqual(self.invoke('scan')['added'], ['normal/a.md'])
 
+    def test_catalog_outside_skill_is_excluded(self):
+        catalog = self.root / 'global-catalog'
+        catalog.mkdir()
+        (catalog / 'GLOSSARY.md').write_text('terms')
+        (self.root / 'a.md').write_text('a')
+        with patch.dict(changes.os.environ, {'GLOSSARY_WIKI_CATALOG': str(catalog)}):
+            self.assertEqual(self.invoke('scan')['added'], ['a.md'])
+
     def test_identical_contents_preserve_path_identity(self):
         (self.root / 'a.md').write_text('same')
         (self.root / 'b.md').write_text('same')

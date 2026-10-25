@@ -2,7 +2,9 @@
 
 ## 总目录
 
-技能安装目录中 `catalog/index.md` 是总入口，`catalog/GLOSSARY.md` 是总术语入口；首次 ingest 时创建。`catalog/registry.json` 保存 wiki_id、project_id、title、当前 root、parent_wiki_id、status、ftag 标签、上次核实时间与输出摘要，`catalog/config.json` 保存 search_roots 与分类阈值。初始 search_roots 使用实际项目所在父目录；需要更大搜索范围时按用户给出的目录扩充。
+`CATALOG_ROOT`（默认 `~/.glossary-wiki/catalog/`，可用环境变量 `GLOSSARY_WIKI_CATALOG` 覆盖，解析顺序见 SKILL.md）中 `index.md` 是总入口，`GLOSSARY.md` 是总术语入口；首次 ingest 时创建。catalog 属于用户数据，不在技能安装目录内，技能升级或重装不得触碰。
+
+`registry.json` 保存 wiki_id、project_id、title、当前 root、parent_wiki_id、status、ftag 标签、上次核实时间与输出摘要。`config.json` 保存 `catalog_root`、search_roots 与分类阈值；其中 `catalog_root` 只是**自述记录**，用于 lint 核对 catalog 是否被移动过，不能作为发现机制——它在 catalog 内部，读它之前必须已经知道 catalog 在哪，位置始终由 SKILL.md 的解析顺序决定。初始 search_roots 使用实际项目所在父目录；需要更大搜索范围时按用户给出的目录扩充。
 
 总 index 只引用各处的 index，不复制知识页。总术语表收录全部权威条目的投影，按 `(project_id, concept_id)` 去重；保留相关 wiki 列表。同名不同概念必须展示“术语 — 项目 — 定义”，绝不能仅按名字合并。若原项目失联，投影保留但标为不可验证，不能作为当前可靠证据。
 

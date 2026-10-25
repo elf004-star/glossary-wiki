@@ -11,7 +11,7 @@ description: 为项目或文档目录建立术语驱动的持久 wiki；用于 i
 
 把 `/glossary-wiki ingest [路径]`、`/glossary-wiki <问题>`、`/glossary-wiki lint [项目级|全局] [快速|详细]` 视为三种操作。宿主使用 `$glossary-wiki` 时同样解释后续参数。路径默认当前目录；lint 默认项目级、快速。仅有技能名时询问要摄取还是查询。
 
-1. 确定技能安装目录 `SKILL_ROOT`（本文件所在目录），全局目录为 `SKILL_ROOT/catalog/`。读取已有 `catalog/index.md`、`catalog/GLOSSARY.md`，按路由只加载相关分类。全局目录尚不存在时按空目录处理，不编造既有口径。
+1. 确定全局目录 `CATALOG_ROOT`，按序解析：环境变量 `GLOSSARY_WIKI_CATALOG` → `~/.glossary-wiki/catalog/`（已存在则用）→ 都不存在就在 `~/.glossary-wiki/catalog/` 创建。**catalog 是用户数据，不是技能资产**，不得放在技能安装目录内；升级、重装或整体替换技能时都不得触碰它。读取已有 `index.md`、`GLOSSARY.md`，按路由只加载相关分类。目录为空时按空目录处理，不编造既有口径。若在旧安装位置 `SKILL_ROOT/catalog/` 发现数据，先整目录迁移到 `CATALOG_ROOT` 再继续，不要新旧两处并行写入。
 2. 定位目标目录及其最近的 `.Glossary-Wiki/`；显式 ingest 路径可建立独立 wiki。首次建立时这三个文件尚不存在，按空 wiki 处理，不要因缺失而中断。已有 wiki 时读取 `AGENTS.md`、`index.md`、`GLOSSARY.md`，再读 [数据约定](references/schema.md)。记录当前覆盖范围和未决术语。
 3. 按分支读取并执行：
    - 首次建立或更新资料：读 [摄取与文档访谈](references/ingest.md)。

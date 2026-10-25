@@ -15,7 +15,9 @@ from contextlib import contextmanager
 from typing import Any
 
 SKIP = {'.git', '.Glossary-Wiki', 'node_modules', '.venv', '__pycache__'}
-CATALOG = Path(__file__).resolve().parents[1] / 'catalog'
+# The global catalog is user data and lives outside the skill install.
+LEGACY_CATALOG = Path(__file__).resolve().parents[1] / 'catalog'
+DEFAULT_CATALOG = Path.home() / '.glossary-wiki' / 'catalog'
 CHUNK_SIZE = 64
 MAX_ARG_CHARS = 8000
 
@@ -68,15 +70,25 @@ def validate_scope(scope: Any) -> dict[str, Any]:
     return scope
 
 
+def catalog_dirs() -> set[Path]:
+    """Exclude every place the global catalog may live, including legacy in-tree installs."""
+    found = {LEGACY_CATALOG, DEFAULT_CATALOG}
+    override = os.environ.get('GLOSSARY_WIKI_CATALOG')
+    if override:
+        found.add(Path(override).expanduser())
+    return found
+
+
 def inventory(root: Path, scope: Any) -> list[str]:
     scope = validate_scope(scope)
+    catalogs = catalog_dirs()
     paths = []
     def failed(error):
         raise error
     for base, dirs, files in os.walk(root, followlinks=False, onerror=failed):
         directory = Path(base)
         dirs[:] = sorted(d for d in dirs if d not in SKIP
-                          and (directory / d) != CATALOG
+                          and (directory / d) not in catalogs
                           and not (directory / d).is_symlink()
                           and not (directory / d / '.Glossary-Wiki').is_dir())
         for name in sorted(files):
